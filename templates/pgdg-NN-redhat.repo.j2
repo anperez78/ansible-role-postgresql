@@ -1,0 +1,6 @@
+[pgdg{{ postgresql_version_short }}]
+name=PostgreSQL {{ postgresql_version }} $releasever - $basearch
+baseurl={{ postgresql_repo_full_url }}
+enabled=0
+gpgcheck=1
+gpgkey={% if postgresql_repo_gpg_key_url is defined %}{{ postgresql_repo_gpg_key_url }}{% else %}file:///etc/pki/rpm-gpg/{{ postgresql_repo_gpg_key_file }}{% endif %}

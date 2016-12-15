@@ -1,0 +1,50 @@
+---
+- name: Calculate the pstgres short version
+  set_fact:
+    postgresql_version_short: "{{ postgresql_version | regex_replace('^(?P<major>.+).(?P<minor>\\d+)$', '\\g<major>\\g<minor>') }}"
+
+- name: Dump postgresql_yum_repository_template for debugging
+  debug:
+    var: postgresql_yum_repository_template
+
+- name: Install dependencies
+  yum:
+    name: "{{ item }}"
+    state: installed
+  with_items:
+    - "libxslt"
+
+- name: PostgreSQL | Install yum repository
+  template:
+    src: pgdg-NN-redhat.repo.j2
+    dest: /etc/yum.repos.d/pgdg-{{ postgresql_version_short }}-redhat.repo
+    owner: root
+    group: root
+    mode: 0644
+
+- name: PostgreSQL | Install GPG key
+  get_url:
+    url: "{{ postgresql_repo_gpg_key_url }}"
+    dest: "/etc/pki/rpm-gpg/{{ postgresql_repo_gpg_key_file }}"
+    mode: 0644
+  environment: "{{ postgresql_repo_proxy | default(omit) }}"
+
+- name: PostgreSQL | Install
+  yum:
+    name: "{{ item }}"
+    state: installed
+    disablerepo: "*"
+    enablerepo: "pgdg{{ postgresql_version_short }}"
+  with_items:
+    - "postgresql{{ postgresql_version_short }}"
+    - "postgresql{{ postgresql_version_short }}-server"
+    - "postgresql{{ postgresql_version_short }}-contrib"
+    - "postgresql{{ postgresql_version_short }}-devel"
+    - "postgresql{{ postgresql_version_short }}-libs"
+    - python-psycopg2
+
+- name: PostgreSQL | Initialise database cluster
+  shell: service "postgresql-{{ postgresql_version }}" initdb
+  args:
+    creates: "/var/lib/pgsql/{{ postgresql_version }}/data/postgresql.conf"
+    warn: no

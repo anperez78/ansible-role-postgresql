@@ -1,0 +1,13 @@
+{{ ansible_managed | comment }}
+
+# This conf.d include file can be used to override settings on a general basis
+
+{% if postgresql_listen_addresses is defined %}
+listen_addresses = {{ postgresql_listen_addresses }}
+{% endif %}
+{% if postgresql_max_connections is defined %}
+max_connections = {{ postgresql_max_connections }}
+{% endif %}
+{% if postgresql_prepared_transactions_enable %}
+max_prepared_transactions = {{ postgresql_max_connections | default(100) }}
+{% endif %}

@@ -1,0 +1,109 @@
+---
+- name: Dump postgresql_hba_config_template for debugging
+  debug:
+    var: postgresql_hba_config_template
+
+- name: PostgreSQL | Template pg_hba.conf
+  template:
+    src: "{{ postgresql_hba_config_template }}"
+    dest: /var/lib/pgsql/{{ postgresql_version }}/data/pg_hba.conf
+    group: postgres
+    owner: postgres
+  notify: Reload PostgreSQL
+
+- name: PostgreSQL | Create conf.d include directory
+  file:
+    dest: /var/lib/pgsql/{{ postgresql_version }}/data/conf.d
+    group: postgres
+    owner: postgres
+    state: directory
+
+- name: PostgreSQL | Uncomment conf.d include directory in postgresql.conf
+  lineinfile:
+    dest: /var/lib/pgsql/{{ postgresql_version }}/data/postgresql.conf
+    regexp: "^#include_dir.*"
+    line: "include_dir = 'conf.d'"
+    backrefs: yes
+  notify: Restart PostgreSQL
+
+- name: Dump postgresql_include_specific_template for debugging
+  debug:
+    var: postgresql_include_general_template
+
+- name: PostgreSQL | Template conf.d include file (general settings)
+  template:
+    src: "{{ postgresql_include_general_template }}"
+    dest: /var/lib/pgsql/{{ postgresql_version }}/data/conf.d/00general.conf
+    group: postgres
+    owner: postgres
+  notify: Restart PostgreSQL
+
+- name: Dump postgresql_include_specific_template for debugging
+  debug:
+    var: postgresql_include_specific_template
+
+- name: PostgreSQL | Template conf.d include file (specific settings)
+  template:
+    src: "{{ postgresql_include_specific_template }}"
+    dest: /var/lib/pgsql/{{ postgresql_version }}/data/conf.d/01specific.conf
+    group: postgres
+    owner: postgres
+  notify: Restart PostgreSQL
+
+- name: PostgreSQL | Manage service
+  service:
+    name: postgresql-{{ postgresql_version }}
+    enabled: "{{ postgresql_service_enable }}"
+    state: "{{ postgresql_service_state }}"
+  when: postgresql_service_manage
+
+- name: PostgreSQL | Check if Replication Manager exists and if so determine who is the master
+  become_user: postgres
+  shell: |
+    psql -U repmgr -d repmgr -w -t -c "select name from repmgr_{{ repmgr_cluster }}.repl_nodes where type='master' and active='t';" | sed -e 's/\ //g'
+  register: repmgr_master_check
+  when: repmgr_ha_enabled is defined and repmgr_ha_enabled
+  changed_when: false
+  ignore_errors: true
+
+- name: PostgreSQL | Create users
+  become_user: postgres
+  postgresql_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+  with_items: "{{ postgresql_user }}"
+  delegate_to: "{{ inventory_hostname if repmgr_master_check.stdout is not defined or repmgr_master_check.stdout | length < 1 else repmgr_master_check.stdout }}"
+  run_once: true
+
+- name: PostgreSQL | Create databases
+  become_user: postgres
+  postgresql_db:
+    name: "{{ item.name }}"
+    encoding: "{{ item.encoding | default('UTF-8') }}"
+    lc_collate: "{{ item.locale | default('en_GB.UTF-8') }}"
+    lc_ctype: "{{ item.locale | default('en_GB.UTF-8') }}"
+    template: template0
+    owner: "{{ item.owner | default('postgres') }}"
+  with_items: "{{ postgresql_database }}"
+  delegate_to: "{{ inventory_hostname if repmgr_master_check.stdout is not defined or repmgr_master_check.stdout | length < 1 else repmgr_master_check.stdout }}"
+  run_once: true
+
+- name: PostgreSQL | Configure superuser for each database
+  become_user: postgres
+  postgresql_user:
+    db: "{{ item.db }}"
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    role_attr_flags: SUPERUSER
+  with_items: "{{ postgresql_superuser }}"
+  delegate_to: "{{ inventory_hostname if repmgr_master_check.stdout is not defined or repmgr_master_check.stdout | length < 1 else repmgr_master_check.stdout }}"
+  run_once: true
+
+- name: PostgreSQL | Run custom SQL
+  become_user: postgres
+  shell: "psql -d {{ item.db }} -c '{{ item.sql }}'"
+  with_items: "{{ postgresql_custom_sql }}"
+  ignore_errors: yes
+  delegate_to: "{{ inventory_hostname if repmgr_master_check.stdout is not defined or repmgr_master_check.stdout | length < 1 else repmgr_master_check.stdout }}"
+  run_once: true
+
