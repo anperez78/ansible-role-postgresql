@@ -6,7 +6,7 @@ A role for deploying and configuring a PostgreSQL database instance on unix host
 Role Variables
 --------------
 
-The variables that can be passed to this role can be found here
+The variables that can be passed to this role can be found [here] (./blob/master/defaults/main.yml)
 
 
 Dependencies
