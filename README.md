@@ -8,7 +8,6 @@ Role Variables
 
 The variables that can be passed to this role can be found [here] (./defaults/main.yml)
 
-
 Dependencies
 ------------
 
